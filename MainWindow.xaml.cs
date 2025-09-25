@@ -21,8 +21,7 @@ namespace KaleidoStream
     {
         private readonly Logger _logger;
         private readonly List<StreamViewer> _streamViewers;
-        private readonly DispatcherTimer _reconnectTimer;
-        private List<string> _streamUrls;
+        private readonly DispatcherTimer _reconnectTimer;       
         private ResolutionConfig _globalResolution = new() { Width = 320, Height = 240 };
 
         private int _gridColumns;
@@ -46,7 +45,7 @@ namespace KaleidoStream
 
             _logger = new Logger(this);
             _streamViewers = new List<StreamViewer>();
-            _streamUrls = new List<string>();
+           
 
             // Setup reconnect timer (check every 3 minutes)
             _reconnectTimer = new DispatcherTimer
