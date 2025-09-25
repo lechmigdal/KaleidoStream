@@ -513,9 +513,35 @@ resolution:
         private string _sourceResolution;
         private bool _isStopped;
         private bool _isRecording;
+        public bool IsRecording
+        {
+            get => _isRecording;
+            set
+            {
+                if (_isRecording != value)
+                {
+                    _isRecording = value;
+                    UpdateStatus();
+                }
+            }
+        }
 
         private MenuItem _recordMenuItem;        
         private MenuItem _startStopMenuItem;
+
+        private string _status;
+        public string Status
+        {
+            get => _status;
+            set
+            {
+                if (_status != value)
+                {
+                    _status = value;
+                    UpdateStatus();
+                }
+            }
+        }
 
         public string StreamUrl { get; }
         public bool IsConnected => _renderer?.IsConnected ?? false;
@@ -613,7 +639,7 @@ resolution:
             _isStopped = true;
             _startButton.Visibility = Visibility.Visible;
             _stopButton.Visibility = Visibility.Collapsed;
-            UpdateStatus(Properties.Resources.Stopping, Brushes.Gray);
+            Status=Properties.Resources.Stopping;
         }
 
         private void UpdateContextMenuText()
@@ -624,14 +650,19 @@ resolution:
             if (_recordMenuItem != null)
             {
                 _recordMenuItem.Header = _isRecording ? "Stop Recording" : "Record";
-                if (IsConnected && !_isStopped)
+                if (_isRecording)
                 {
                     _recordMenuItem.IsEnabled = true;
-                } else
+                }
+                else if (IsConnected && !_isStopped)
+                {
+                    _recordMenuItem.IsEnabled = true;
+                }
+                else
                 {
                     _recordMenuItem.IsEnabled = false;
                 }
-                
+
             }
         }
 
@@ -653,13 +684,13 @@ resolution:
             if (_isRecording)
             {
                 _renderer.StopRecording();
-                _isRecording = false;
+                IsRecording = false;
                 _logger.Log($"Stopped recording for stream: {StreamUrl}");
             }
             else
             {
                 _renderer.StartRecording();
-                _isRecording = true;
+                IsRecording = true;
                 _logger.Log($"Started recording for stream: {StreamUrl}");
             }
             UpdateContextMenuText();
@@ -675,7 +706,7 @@ resolution:
             UpdateContextMenuText();
             _startButton.Visibility = Visibility.Collapsed;
             _stopButton.Visibility = Visibility.Visible;
-            UpdateStatus(Properties.Resources.ConnectingStatus, Brushes.Yellow);
+            Status = Properties.Resources.ConnectingStatus;
 
             try
             {
@@ -684,7 +715,7 @@ resolution:
             catch (Exception ex)
             {
                 _logger.LogError($"Failed to start stream {StreamUrl}: {ex.Message}");
-                UpdateStatus(Properties.Resources.ConnectionFailedStatus, Brushes.Red);
+                Status = Properties.Resources.ConnectionFailedStatus;
             }
         }
 
@@ -697,7 +728,7 @@ resolution:
             _startButton.Visibility = Visibility.Visible;
             _stopButton.Visibility = Visibility.Collapsed;
             _renderer.StopRecording();
-            UpdateStatus(Properties.Resources.StoppedStatus, Brushes.Gray);            
+            Status = Properties.Resources.StoppedStatus;            
         }
 
         private void OnResolutionDetected(string resolution)
@@ -707,7 +738,7 @@ resolution:
             {
                 _startButton.Visibility = Visibility.Collapsed;
                 _stopButton.Visibility = Visibility.Visible;
-                UpdateStatus(Properties.Resources.ConnectedStatus, Brushes.Green);
+                Status = Properties.Resources.ConnectedStatus;
             }
         }
 
@@ -719,13 +750,13 @@ resolution:
 
             try
             {
-                UpdateStatus(Properties.Resources.ReconnectingStatus, Brushes.Yellow);
+                Status = Properties.Resources.ReconnectingStatus;
                 await _renderer.ReconnectAsync();
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Reconnection failed for {StreamUrl}: {ex.Message}");
-                UpdateStatus(Properties.Resources.ReconnectionFailedStatus, Brushes.Red);
+                Status = Properties.Resources.ReconnectionFailedStatus;
             }
         }
 
@@ -735,28 +766,51 @@ resolution:
             _height = height;
             _renderer?.ChangeResolution(width, height);
             // Force status update to reflect new render resolution
-            UpdateStatus(IsConnected ? Properties.Resources.ConnectedStatus : Properties.Resources.ConnectingStatus, IsConnected ? Brushes.Green : Brushes.Yellow);
+            Status = IsConnected ? Properties.Resources.ConnectedStatus : Properties.Resources.ConnectingStatus;
         }
 
-        public void UpdateStatus(string status, Brush color)
+        public void UpdateStatus()
         {
             if (_disposed) return;
 
             if (!Dispatcher.CheckAccess())
             {
-                Dispatcher.BeginInvoke(new Action(() => UpdateStatus(status, color)));
+                Dispatcher.BeginInvoke(new Action(() => UpdateStatus()));
                 return;
             }
+
+            // Select color based on status
+            Brush color = Brushes.White;
+            if (_status == Properties.Resources.ConnectedStatus)
+                color = Brushes.Green;
+            else if (_status == Properties.Resources.ConnectingStatus || _status == Properties.Resources.ReconnectingStatus)
+                color = Brushes.Yellow;
+            else if (_status == Properties.Resources.StoppedStatus || _status == Properties.Resources.Stopping)
+                color = Brushes.Gray;
+            else if (_status == Properties.Resources.ConnectionFailedStatus || _status == Properties.Resources.ReconnectionFailedStatus)
+                color = Brushes.Red;
 
             try
             {
                 var displayName = _streamName;
-                if (!string.IsNullOrEmpty(_sourceResolution) && status == Properties.Resources.ConnectedStatus)
+                if (!string.IsNullOrEmpty(_sourceResolution) && _status == Properties.Resources.ConnectedStatus)
                     displayName += $" ({_sourceResolution}->{_width}x{_height})";
 
                 _statusText.Inlines.Clear();
                 _statusText.Inlines.Add(new System.Windows.Documents.Run(displayName + ": ") { Foreground = Brushes.White });
-                _statusText.Inlines.Add(new System.Windows.Documents.Run(status) { Foreground = color });
+                _statusText.Inlines.Add(new System.Windows.Documents.Run(_status) { Foreground = color });
+
+                // Add recording status
+                if (_isRecording)
+                {
+                    _statusText.Inlines.Add(new System.Windows.Documents.Run(" (RECORDING)") { Foreground = Brushes.Red });
+                }
+                else
+                {
+                    _statusText.Inlines.Add(new System.Windows.Documents.Run(" (NOT RECORDING)") { Foreground = Brushes.White });
+                }
+
+
                 UpdateContextMenuText();
             }
             catch (Exception ex)

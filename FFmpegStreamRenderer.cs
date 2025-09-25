@@ -75,7 +75,7 @@ namespace KaleidoStream
             }
 
             _logger.Log($"{_streamName} - Starting stream: {_streamUrl}");
-            _viewer.UpdateStatus("Connecting...", Brushes.Yellow);
+            _viewer.Status = "Connecting...";
 
             _streamingTask = Task.Run(async () => await StreamLoop(_cancellationTokenSource.Token));
 
@@ -87,9 +87,21 @@ namespace KaleidoStream
         {
             if (_disposed) return;
 
+            bool wasRecording = _isRecording;
+
+            if (wasRecording)
+            {
+                StopRecording();
+            }
+
             await StopAsync();
             await Task.Delay(1000); // 1 second delay before reconnecting
             await StartAsync();
+
+            if (wasRecording)
+            {
+                StartRecording();
+            }
         }
 
         public void StopCompletely()
@@ -161,11 +173,25 @@ namespace KaleidoStream
                     CreateNoWindow = true
                 };
 
-                _recordingProcess = new Process { StartInfo = startInfo };
+                _recordingProcess = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
                 _recordingProcess.ErrorDataReceived += (sender, e) =>
                 {
                     if (!string.IsNullOrEmpty(e.Data))
                         _logger.Log($"FFmpeg Record: {e.Data}");
+                };
+
+                _recordingProcess.Exited += (sender, e) =>
+                {
+                    // This runs on a threadpool thread, so be careful with UI access
+                    if (_isRecording)
+                    {
+                        _logger.LogWarning($"Recording process exited unexpectedly, restarting recording...");
+                        // Restart recording on the UI thread if needed
+                        App.Current.Dispatcher.Invoke(() =>
+                        {
+                            StartRecording();
+                        });
+                    }
                 };
 
                 if (_recordingProcess.Start())
@@ -252,7 +278,7 @@ namespace KaleidoStream
                     retryCount++;
                     IsConnected = false;
                     _logger.LogError($"{_streamName} - Stream error for {_streamUrl} (attempt {retryCount}): {ex.Message}");
-                    _viewer.UpdateStatus($"Error (Retry {retryCount})", Brushes.Red);
+                    _viewer.Status = $"Error (Retry {retryCount})";
 
                     if (!cancellationToken.IsCancellationRequested)
                     {
@@ -388,7 +414,7 @@ namespace KaleidoStream
                         if (!firstFrameReceived)
                         {
                             IsConnected = true;
-                            _viewer.UpdateStatus("Connected", Brushes.Green);
+                            _viewer.Status = "Connected";
                             _logger.Log($"{_streamName} - Successfully connected to stream: {_streamUrl}");
                             firstFrameReceived = true;
                         }
