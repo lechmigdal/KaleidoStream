@@ -1,0 +1,56 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net8.0-windows</TargetFramework>
+		<UseWPF>true</UseWPF>
+		<ImplicitUsings>disable</ImplicitUsings>
+		<Nullable>disable</Nullable>
+		<AssemblyTitle>KaleidoStream</AssemblyTitle>
+		<AssemblyDescription>RTSP Stream Viewer Application</AssemblyDescription>
+		<AssemblyProduct>KaleidoStream</AssemblyProduct>
+		<AssemblyCompany>KaleidoStream</AssemblyCompany>
+		<AssemblyCopyright>Copyright © 2025</AssemblyCopyright>
+		<AssemblyVersion>1.0.0.0</AssemblyVersion>
+		<FileVersion>1.0.0.0</FileVersion>
+		<Platforms>AnyCPU;x64</Platforms>
+		<ApplicationIcon>images/videowall.ico</ApplicationIcon>
+	</PropertyGroup>
+
+	<ItemGroup>
+	  <None Remove="images\Delete.png" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <PackageReference Include="YamlDotNet" Version="16.3.0" />
+	</ItemGroup>
+
+
+	<ItemGroup>
+		<None Update="config.yaml">
+			<CopyToOutputDirectory Condition="'$(Configuration)' == 'Debug'">PreserveNewest</CopyToOutputDirectory>
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+	</ItemGroup>
+
+	<ItemGroup>
+		<Resource Include="images/videowall.ico" />
+		<Resource Include="images\Delete.png" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Compile Update="Properties\Resources.Designer.cs">
+	    <DesignTime>True</DesignTime>
+	    <AutoGen>True</AutoGen>
+	    <DependentUpon>Resources.resx</DependentUpon>
+	  </Compile>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <EmbeddedResource Update="Properties\Resources.resx">
+	    <Generator>PublicResXFileCodeGenerator</Generator>
+	    <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+	  </EmbeddedResource>
+	</ItemGroup>
+
+</Project>

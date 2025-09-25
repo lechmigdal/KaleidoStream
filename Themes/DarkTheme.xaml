@@ -1,0 +1,24 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Color x:Key="WindowBackgroundColor">#222</Color>
+    <Color x:Key="TextColor">#FFF</Color>
+    <SolidColorBrush x:Key="WindowBackgroundBrush" Color="{StaticResource WindowBackgroundColor}" />
+    <SolidColorBrush x:Key="TextBrush" Color="{StaticResource TextColor}" />
+    <SolidColorBrush x:Key="MenuBackgroundBrush" Color="#333"/>
+    <SolidColorBrush x:Key="MenuForegroundBrush" Color="{StaticResource TextColor}" />
+    <SolidColorBrush x:Key="MenuItemHighlightBrush" Color="#222" />
+
+    <Style TargetType="Menu">
+        <Setter Property="Background" Value="{DynamicResource MenuBackgroundBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource MenuForegroundBrush}" />
+    </Style>
+    <Style TargetType="MenuItem">
+        <Setter Property="Background" Value="{DynamicResource MenuBackgroundBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource MenuForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource MenuBackgroundBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+
+
+</ResourceDictionary>

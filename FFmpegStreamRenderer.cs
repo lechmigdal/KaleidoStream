@@ -1,0 +1,560 @@
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Shapes;
+
+namespace KaleidoStream
+{
+    public class FFmpegStreamRenderer : IDisposable
+    {
+        private readonly string _streamUrl;
+        private readonly Logger _logger;
+        private readonly StreamViewer _viewer;
+        private CancellationTokenSource _cancellationTokenSource;
+        private Task _streamingTask;
+        private bool _disposed;
+        private DateTime _lastFrameTime;
+        private readonly object _lockObject = new object();
+        private WriteableBitmap _videoBitmap;
+        private readonly string _streamName;
+        private int _displayWidth;
+        private int _displayHeight;
+        private string _inputResolution;
+
+        public event Action<string> ResolutionDetected;
+
+        private Process _recordingProcess;
+        private string _recordingFilePath;
+        private bool _isRecording;
+
+        public bool IsRecording => _isRecording;
+
+        public bool IsConnected { get; private set; }
+
+        public string InputResolution
+        {
+            get => _inputResolution;
+            private set
+            {
+                if (_inputResolution != value)
+                {
+                    _inputResolution = value;
+                    ResolutionDetected?.Invoke(_inputResolution);
+                }
+            }
+        }
+
+        public FFmpegStreamRenderer(string streamUrl, string streamName, Logger logger, StreamViewer viewer, int width, int height)
+        {
+            _streamUrl = streamUrl;
+            _logger = logger;
+            _viewer = viewer;
+            _streamName = streamName;
+            _displayWidth = width;
+            _displayHeight = height;
+            _lastFrameTime = DateTime.MinValue;
+        }
+
+        public async Task StartAsync()
+        {
+            _logger.LogWarning($"{_streamName} - StartAsync {_streamUrl}");
+            if (_disposed) return;
+
+            lock (_lockObject)
+            {
+                if (_streamingTask != null && !_streamingTask.IsCompleted)
+                    return;
+
+                _cancellationTokenSource = new CancellationTokenSource();
+            }
+
+            _logger.Log($"{_streamName} - Starting stream: {_streamUrl}");
+            _viewer.UpdateStatus("Connecting...", Brushes.Yellow);
+
+            _streamingTask = Task.Run(async () => await StreamLoop(_cancellationTokenSource.Token));
+
+            // Wait a moment to let the task start
+            await Task.Delay(100);
+        }
+
+        public async Task ReconnectAsync()
+        {
+            if (_disposed) return;
+
+            await StopAsync();
+            await Task.Delay(1000); // 1 second delay before reconnecting
+            await StartAsync();
+        }
+
+        public void StopCompletely()
+        {
+            _cancellationTokenSource?.Cancel();
+            IsConnected = false;
+        }
+
+        private async Task StopAsync()
+        {
+            lock (_lockObject)
+            {
+                _cancellationTokenSource?.Cancel();
+                IsConnected = false;
+            }
+
+            if (_streamingTask != null)
+            {
+                try
+                {
+                    await _streamingTask;
+                }
+                catch (OperationCanceledException)
+                {
+                    // Expected when cancelling
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError($"{_streamName} - Error stopping stream {_streamUrl}: {ex.Message}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Starts recording the stream to a .ts file in ./videos.
+        /// </summary>
+        public void StartRecording()
+        {
+            if (_isRecording) return;
+
+            try
+            {
+                string videosDir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "videos");
+                Directory.CreateDirectory(videosDir);
+
+                string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                string fileName = $"{_streamName}_{timestamp}.ts";
+                _recordingFilePath = System.IO.Path.Combine(videosDir, fileName);
+                _logger.Log($"Recording path: {_recordingFilePath}");
+
+                // FFmpeg command for recording MPEG-TS
+                string arguments;
+                if (IsRtmpStream(_streamUrl))
+                {
+                    arguments = $"-fflags nobuffer -flush_packets 1 -fflags +genpts -i \"{_streamUrl}\" -c copy -f mpegts \"{_recordingFilePath}\"";
+                }
+                else
+                {
+                    arguments = $"-rtsp_transport tcp -fflags nobuffer -flush_packets 1 -fflags +genpts -i \"{_streamUrl}\" -c copy -f mpegts \"{_recordingFilePath}\"";
+                }
+
+                var startInfo = new ProcessStartInfo
+                {
+                    FileName = GetFFmpegPath(),
+                    Arguments = arguments,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = false,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+
+                _recordingProcess = new Process { StartInfo = startInfo };
+                _recordingProcess.ErrorDataReceived += (sender, e) =>
+                {
+                    if (!string.IsNullOrEmpty(e.Data))
+                        _logger.Log($"FFmpeg Record: {e.Data}");
+                };
+
+                if (_recordingProcess.Start())
+                {
+                    _recordingProcess.BeginErrorReadLine();
+                    _isRecording = true;
+                    _logger.Log($"Started recording to {_recordingFilePath}");
+                }
+                else
+                {
+                    _logger.LogError("Failed to start FFmpeg recording process.");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error starting recording: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Stops the recording process if active.
+        /// </summary>
+        public void StopRecording()
+        {
+            if (!_isRecording || _recordingProcess == null) return;
+
+            try
+            {
+
+                // Close standard input to signal FFmpeg to finish
+                _recordingProcess.StandardInput.Close();
+
+                // Wait for FFmpeg to flush and exit
+                if (!_recordingProcess.WaitForExit(5000))
+                {
+                    _logger.LogWarning($"FFmpeg recording process did not exit within timeout, killing...");
+                    _recordingProcess.Kill();
+                    _recordingProcess.WaitForExit(2000);
+                }
+
+                _logger.Log($"Stopped recording. File saved: {_recordingFilePath}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error stopping recording: {ex.Message}");
+            }
+            finally
+            {
+                _isRecording = false;
+                _recordingProcess?.Dispose();
+                _recordingProcess = null;
+                _recordingFilePath = null;
+            }
+        }
+
+        private bool IsRtmpStream(string url)
+        {
+            return url.StartsWith("rtmp://", StringComparison.OrdinalIgnoreCase);
+        }
+        public void ChangeResolution(int width, int height)
+        {
+            if (_displayWidth == width && _displayHeight == height) return;
+            _displayWidth = width;
+            _displayHeight = height;
+            _ = ReconnectAsync();
+        }
+        private async Task StreamLoop(CancellationToken cancellationToken)
+        {
+            int retryCount = 0;
+
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                try
+                {
+                    await ProcessStream(cancellationToken);
+                    break; // Successful processing
+                }
+                catch (OperationCanceledException)
+                {
+                    break; // Intentional cancellation
+                }
+                catch (Exception ex)
+                {
+                    retryCount++;
+                    IsConnected = false;
+                    _logger.LogError($"{_streamName} - Stream error for {_streamUrl} (attempt {retryCount}): {ex.Message}");
+                    _viewer.UpdateStatus($"Error (Retry {retryCount})", Brushes.Red);
+
+                    if (!cancellationToken.IsCancellationRequested)
+                    {
+                        await Task.Delay(5000, cancellationToken); // Wait 5 seconds before retry
+                    }
+                }
+            }
+        }
+
+        private async Task ProcessStream(CancellationToken cancellationToken)
+        {
+            // Low latency FFmpeg arguments for RTSP
+            string arguments;
+            if (IsRtmpStream(_streamUrl))
+            {
+                // RTMP: no -rtsp_transport, use low latency flags if needed
+                arguments = $"-fflags nobuffer -flags low_delay -max_delay 0 -i \"{_streamUrl}\" " +
+                            $"-vf scale={_displayWidth}:{_displayHeight} -pix_fmt bgr24 -f rawvideo -";
+            }
+            else
+            {
+                // RTSP
+                arguments = $"-rtsp_transport tcp -fflags nobuffer -flags low_delay -strict experimental " +
+                            $"-avioflags direct -fflags discardcorrupt  -flush_packets 1 -max_delay 0 -i \"{_streamUrl}\" " +
+                            $"-vf scale={_displayWidth}:{_displayHeight} -pix_fmt bgr24 -f rawvideo -";
+            }
+
+            _logger.Log($"ffmpeg arguments: {arguments}");
+
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = GetFFmpegPath(),
+                Arguments = arguments,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+
+            using var process = new Process { StartInfo = startInfo };
+
+            var errorOutput = new System.Text.StringBuilder();
+            process.ErrorDataReceived += (sender, e) =>
+            {
+                if (!string.IsNullOrEmpty(e.Data))
+                {
+                    _logger.Log($"{e.Data}");
+                    errorOutput.AppendLine(e.Data);
+                    if (e.Data.Contains("error", StringComparison.OrdinalIgnoreCase) ||
+                        e.Data.Contains("failed", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _logger.LogWarning($"FFmpeg: {e.Data}");
+                    }
+
+                    // Extract resolution from lines like: "Stream #0:0: Video: ... 176x144 ..."
+                    var match = Regex.Match(
+                                           e.Data,
+                                             @"^\s*Stream #0:0: Video: h264.*? (\d{2,5})x(\d{2,5}),",
+                                           RegexOptions.Compiled);
+                    if (match.Success)
+                    {
+                        string width = match.Groups[1].Value;
+                        string height = match.Groups[2].Value;
+                        InputResolution = $"{width}x{height}";
+                        _logger.Log($"{_streamName}: Detected source resolution: {InputResolution}");
+
+                    }
+                }
+            };
+
+            try
+            {
+                if (!process.Start())
+                {
+                    throw new InvalidOperationException("Failed to start FFmpeg process");
+                }
+
+                process.BeginErrorReadLine();
+
+                // Wait for process to initialize and start producing output
+                await Task.Delay(200, cancellationToken);
+
+                if (process.HasExited)
+                {
+                    throw new InvalidOperationException($"FFmpeg exited early: {errorOutput}");
+                }
+
+                int width = _displayWidth;
+                int height = _displayHeight;
+                int frameSize = width * height * 3; // BGR24 = 3 bytes per pixel
+
+                _viewer.Dispatcher.Invoke(() => {
+                    _videoBitmap = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgr24, null);
+                    _viewer.SetVideoFrame(_videoBitmap);
+                });
+              
+                var buffer = new byte[frameSize];
+                var stream = process.StandardOutput.BaseStream;
+                var readBuffer = new byte[8192]; // Read buffer for chunks
+
+                _lastFrameTime = DateTime.Now;
+                bool firstFrameReceived = false;
+
+                while (!cancellationToken.IsCancellationRequested && !process.HasExited)
+                {
+                    int totalBytesRead = 0;
+
+                    // Read complete frame
+                    while (totalBytesRead < frameSize && !cancellationToken.IsCancellationRequested && !process.HasExited)
+                    {
+                        int chunkSize = Math.Min(readBuffer.Length, frameSize - totalBytesRead);
+                        int bytesRead = await stream.ReadAsync(readBuffer, 0, chunkSize, cancellationToken);
+
+                        if (bytesRead == 0)
+                        {
+                            // Check if process is still running
+                            if (process.HasExited)
+                                throw new InvalidOperationException($"FFmpeg process exited unexpectedly: {errorOutput}");
+            
+                            await Task.Delay(10, cancellationToken); // Brief delay before retry
+                            continue;
+                        }
+
+                        Array.Copy(readBuffer, 0, buffer, totalBytesRead, bytesRead);
+                        totalBytesRead += bytesRead;
+                    }
+
+                    if (totalBytesRead == frameSize)
+                    {
+                        await ProcessFrame(buffer, width, height);
+                        _lastFrameTime = DateTime.Now;
+
+                        if (!firstFrameReceived)
+                        {
+                            IsConnected = true;
+                            _viewer.UpdateStatus("Connected", Brushes.Green);
+                            _logger.Log($"{_streamName} - Successfully connected to stream: {_streamUrl}");
+                            firstFrameReceived = true;
+                        }
+                    }
+                }
+                // If we exit the loop and never received a frame, treat as failure
+                if (!firstFrameReceived)
+                {
+                    throw new InvalidOperationException($"FFmpeg did not deliver any frames: {errorOutput}");
+                }
+
+                // If FFmpeg exited unexpectedly, throw to trigger retry
+                if (process.HasExited && !cancellationToken.IsCancellationRequested)
+                {
+                    throw new InvalidOperationException($"FFmpeg process exited unexpectedly: {errorOutput}");
+                }
+            }
+            catch (Exception ex) when (!(ex is OperationCanceledException))
+            {
+                _logger.LogError($"{_streamName} - Stream processing error: {ex.Message}");
+                throw;
+            }
+            finally
+            {
+                try
+                {
+                    if (!process.HasExited)
+                    {
+                        process.Kill();
+                        // Give process time to exit gracefully
+                        if (!process.WaitForExit(2000))
+                        {
+                            _logger.LogWarning($"{_streamName} - FFmpeg process did not exit within timeout for {_streamUrl}");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning($"{_streamName} - Error stopping FFmpeg process: {ex.Message}");
+                }
+                IsConnected = false;
+            }
+        }
+
+        private async Task ProcessFrame(byte[] frameData, int width, int height)
+        {
+            if (_disposed) return;
+
+            try
+            {
+                await _viewer.Dispatcher.InvokeAsync(() =>
+                {
+                    _videoBitmap.Lock();
+                    try
+                    {
+                        int stride = _videoBitmap.BackBufferStride;
+                        IntPtr backBuffer = _videoBitmap.BackBuffer;
+
+                        for (int y = 0; y < height; y++)
+                        {
+                            IntPtr destLine = backBuffer + y * stride;
+                            int srcOffset = y * width * 3;
+                            Marshal.Copy(frameData, srcOffset, destLine, width * 3);
+                        }
+
+                        _videoBitmap.AddDirtyRect(new System.Windows.Int32Rect(0, 0, width, height));
+                    }
+                    finally
+                    {
+                        _videoBitmap.Unlock();
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"{_streamName} - Error processing frame for {_streamUrl}: {ex.Message}");
+            }
+        }
+
+        private string GetFFmpegPath()
+        {
+            // Try to find FFmpeg in common locations
+            var possiblePaths = new[]
+            {
+                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ffmpeg.exe"),
+                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ffmpeg", "ffmpeg.exe"),
+                System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "FFmpeg", "bin", "ffmpeg.exe"),
+                "ffmpeg" // Try system PATH without .exe for cross-platform compatibility
+            };
+
+            foreach (var path in possiblePaths)
+            {
+                if (File.Exists(path))
+                {
+                    return path;
+                }
+            }
+
+            // Try PATH
+            try
+            {
+                var process = new Process
+                {
+                    StartInfo = new ProcessStartInfo
+                    {
+                        FileName = "where", // Windows command to find executable in PATH
+                        Arguments = "ffmpeg",
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        CreateNoWindow = true
+                    }
+                };
+                process.Start();
+                var output = process.StandardOutput.ReadToEnd();
+                process.WaitForExit();
+
+                if (process.ExitCode == 0 && !string.IsNullOrWhiteSpace(output))
+                {
+                    var firstPath = output.Split('\n')[0].Trim();
+                    if (File.Exists(firstPath))
+                        return firstPath;
+                }
+            }
+            catch
+            {
+                // Fall through to error
+            }
+
+            throw new FileNotFoundException(
+                "FFmpeg executable not found. Please:\n" +
+                "1. Download FFmpeg from https://ffmpeg.org/download.html\n" +
+                "2. Place ffmpeg.exe in your application folder, or\n" +
+                "3. Install FFmpeg and add it to your system PATH");
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+
+            try
+            {
+                _cancellationTokenSource?.Cancel();
+
+                // Stop recording if active
+                StopRecording();
+
+                // Give the task time to complete gracefully
+                if (_streamingTask != null && !_streamingTask.IsCompleted)
+                {
+                    var completed = _streamingTask.Wait(TimeSpan.FromSeconds(3));
+                    if (!completed)
+                    {
+                        _logger.LogWarning($"{_streamName} - Stream task for {_streamUrl} did not complete within timeout");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"{_streamName} - Error during dispose for {_streamUrl}: {ex.Message}");
+            }
+            finally
+            {
+                _cancellationTokenSource?.Dispose();
+                IsConnected = false;
+            }
+        }
+    }
+}
