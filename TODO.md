@@ -1,6 +1,5 @@
 # TODO
 
-1. BUG: recording doesnt continue after stream interruption
 1. 1. Change theme of the VideoWindow according to seleted theme
 1. Selection of resolution for each stream (right mouse click)
 1. Menu -> Stop all / start all (select option)

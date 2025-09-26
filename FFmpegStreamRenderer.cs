@@ -31,7 +31,7 @@ namespace KaleidoStream
 
         public event Action<string> ResolutionDetected;
 
-        private Process _recordingProcess;                
+        private Process _displayProcess;                
 
         public bool IsRecording => _recordingManager.IsRecording;
 
@@ -39,12 +39,12 @@ namespace KaleidoStream
 
         public void StopRecording()
         {
-            _recordingManager.StopRecording();
+            _recordingManager.RequestRecordingStop();
         }
 
         public void StartRecording()
         {
-            _recordingManager.StartRecording();
+            _recordingManager.RequestRecordingStart();             
         }
 
         public string InputResolution
@@ -215,10 +215,10 @@ namespace KaleidoStream
                 CreateNoWindow = true
             };
 
-            _recordingProcess= new Process { StartInfo = startInfo };
+            _displayProcess= new Process { StartInfo = startInfo };
 
             var errorOutput = new System.Text.StringBuilder();
-            _recordingProcess.ErrorDataReceived += (sender, e) =>
+            _displayProcess.ErrorDataReceived += (sender, e) =>
             {
                 if (!string.IsNullOrEmpty(e.Data))
                 {
@@ -248,17 +248,17 @@ namespace KaleidoStream
 
             try
             {
-                if (!_recordingProcess.Start())
+                if (!_displayProcess.Start())
                 {
                     throw new InvalidOperationException("Failed to start FFmpeg process");
                 }
 
-                _recordingProcess.BeginErrorReadLine();
+                _displayProcess.BeginErrorReadLine();
 
                 // Wait for process to initialize and start producing output
                 await Task.Delay(200, cancellationToken);
 
-                if (_recordingProcess.HasExited)
+                if (_displayProcess.HasExited)
                 {
                     throw new InvalidOperationException($"FFmpeg exited early: {errorOutput}");
                 }
@@ -273,18 +273,18 @@ namespace KaleidoStream
                 });
               
                 var buffer = new byte[frameSize];
-                var stream = _recordingProcess.StandardOutput.BaseStream;
+                var stream = _displayProcess.StandardOutput.BaseStream;
                 var readBuffer = new byte[8192]; // Read buffer for chunks
 
                 _lastFrameTime = DateTime.Now;
                 bool firstFrameReceived = false;
 
-                while (!cancellationToken.IsCancellationRequested && !_recordingProcess.HasExited)
+                while (!cancellationToken.IsCancellationRequested && !_displayProcess.HasExited)
                 {
                     int totalBytesRead = 0;
 
                     // Read complete frame
-                    while (totalBytesRead < frameSize && !cancellationToken.IsCancellationRequested && !_recordingProcess.HasExited)
+                    while (totalBytesRead < frameSize && !cancellationToken.IsCancellationRequested && !_displayProcess.HasExited)
                     {
                         int chunkSize = Math.Min(readBuffer.Length, frameSize - totalBytesRead);
                         int bytesRead = await stream.ReadAsync(readBuffer, 0, chunkSize, cancellationToken);
@@ -292,7 +292,7 @@ namespace KaleidoStream
                         if (bytesRead == 0)
                         {
                             // Check if process is still running
-                            if (_recordingProcess.HasExited)
+                            if (_displayProcess.HasExited)
                                 throw new InvalidOperationException($"FFmpeg process exited unexpectedly: {errorOutput}");
             
                             await Task.Delay(10, cancellationToken); // Brief delay before retry
@@ -316,7 +316,7 @@ namespace KaleidoStream
                             firstFrameReceived = true;
 
                             // Start recording if requested and not already running
-                            if (_recordingManager.IsRecording && (_recordingProcess == null || _recordingProcess.HasExited))
+                            if (_recordingManager.IsRecording && (_displayProcess == null || _displayProcess.HasExited))
                             {
                                 _recordingManager.StartRecording();
                             }
@@ -330,7 +330,7 @@ namespace KaleidoStream
                 }
 
                 // If FFmpeg exited unexpectedly, throw to trigger retry
-                if (_recordingProcess.HasExited && !cancellationToken.IsCancellationRequested)
+                if (_displayProcess.HasExited && !cancellationToken.IsCancellationRequested)
                 {
                     throw new InvalidOperationException($"FFmpeg process exited unexpectedly: {errorOutput}");
                 }
@@ -344,11 +344,11 @@ namespace KaleidoStream
             {
                 try
                 {
-                    if (!_recordingProcess.HasExited)
+                    if (!_displayProcess.HasExited)
                     {
-                        _recordingProcess.Kill();
+                        _displayProcess.Kill();
                         // Give process time to exit gracefully
-                        if (!_recordingProcess.WaitForExit(2000))
+                        if (!_displayProcess.WaitForExit(2000))
                         {
                             _logger.LogWarning($"{_streamName} - FFmpeg process did not exit within timeout for {_streamUrl}");
                         }

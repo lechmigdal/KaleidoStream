@@ -69,9 +69,10 @@ namespace KaleidoStream
                 _recordingProcess.Exited += (sender, e) =>
                 {
                     // This runs on a threadpool thread, so be careful with UI access
-                    if (_isRecording)
+                    if (_recordingRequested)
                     {
                         _logger.LogWarning($"Recording process exited unexpectedly, restarting recording...");
+                        _isRecording = false;
                         // Restart recording on the UI thread if needed
                         App.Current.Dispatcher.Invoke(() =>
                         {
@@ -130,10 +131,10 @@ namespace KaleidoStream
             }
         }
 
-        public void RequestRecordingStart(string streamUrl, string streamName)
+        public void RequestRecordingStart()
         {
             _recordingRequested = true;
-            // Start recording if possible
+            StartRecording();
         }
 
         public void RequestRecordingStop()

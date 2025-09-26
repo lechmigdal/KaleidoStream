@@ -723,12 +723,13 @@ resolution:
         {
             if (_disposed) return;
             _isStopped = true;
-            UpdateContextMenuText();
+            IsRecording = false;
             _renderer.StopCompletely();
             _startButton.Visibility = Visibility.Visible;
             _stopButton.Visibility = Visibility.Collapsed;
-            _renderer.StopRecording();
-            Status = Properties.Resources.StoppedStatus;            
+            _renderer.StopRecording();            
+            Status = Properties.Resources.StoppedStatus;
+            UpdateContextMenuText();
         }
 
         private void OnResolutionDetected(string resolution)
