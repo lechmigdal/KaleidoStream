@@ -27,15 +27,25 @@ namespace KaleidoStream
         private int _displayHeight;
         private string _inputResolution;
 
+        private FFmpegRecordingManager _recordingManager;
+
         public event Action<string> ResolutionDetected;
 
-        private Process _recordingProcess;
-        private string _recordingFilePath;
-        private bool _isRecording;
+        private Process _recordingProcess;                
 
-        public bool IsRecording => _isRecording;
+        public bool IsRecording => _recordingManager.IsRecording;
 
         public bool IsConnected { get; private set; }
+
+        public void StopRecording()
+        {
+            _recordingManager.StopRecording();
+        }
+
+        public void StartRecording()
+        {
+            _recordingManager.StartRecording();
+        }
 
         public string InputResolution
         {
@@ -59,6 +69,8 @@ namespace KaleidoStream
             _displayWidth = width;
             _displayHeight = height;
             _lastFrameTime = DateTime.MinValue;
+
+            _recordingManager = new FFmpegRecordingManager(_logger, _streamUrl, _streamName);
         }
 
         public async Task StartAsync()
@@ -87,11 +99,11 @@ namespace KaleidoStream
         {
             if (_disposed) return;
 
-            bool wasRecording = _isRecording;
+            bool wasRecording = _recordingManager.IsRecording; ;
 
             if (wasRecording)
             {
-                StopRecording();
+                _recordingManager.StopRecording();
             }
 
             await StopAsync();
@@ -100,7 +112,7 @@ namespace KaleidoStream
 
             if (wasRecording)
             {
-                StartRecording();
+                _recordingManager.StartRecording();
             }
         }
 
@@ -135,122 +147,6 @@ namespace KaleidoStream
             }
         }
 
-        /// <summary>
-        /// Starts recording the stream to a .ts file in ./videos.
-        /// </summary>
-        public void StartRecording()
-        {
-            if (_isRecording) return;
-
-            try
-            {
-                string videosDir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "videos");
-                Directory.CreateDirectory(videosDir);
-
-                string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-                string fileName = $"{_streamName}_{timestamp}.ts";
-                _recordingFilePath = System.IO.Path.Combine(videosDir, fileName);
-                _logger.Log($"Recording path: {_recordingFilePath}");
-
-                // FFmpeg command for recording MPEG-TS
-                string arguments;
-                if (IsRtmpStream(_streamUrl))
-                {
-                    arguments = $"-fflags nobuffer -flush_packets 1 -fflags +genpts -i \"{_streamUrl}\" -c copy -f mpegts \"{_recordingFilePath}\"";
-                }
-                else
-                {
-                    arguments = $"-rtsp_transport tcp -fflags nobuffer -flush_packets 1 -fflags +genpts -i \"{_streamUrl}\" -c copy -f mpegts \"{_recordingFilePath}\"";
-                }
-
-                var startInfo = new ProcessStartInfo
-                {
-                    FileName = GetFFmpegPath(),
-                    Arguments = arguments,
-                    UseShellExecute = false,
-                    RedirectStandardOutput = false,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true
-                };
-
-                _recordingProcess = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
-                _recordingProcess.ErrorDataReceived += (sender, e) =>
-                {
-                    if (!string.IsNullOrEmpty(e.Data))
-                        _logger.Log($"FFmpeg Record: {e.Data}");
-                };
-
-                _recordingProcess.Exited += (sender, e) =>
-                {
-                    // This runs on a threadpool thread, so be careful with UI access
-                    if (_isRecording)
-                    {
-                        _logger.LogWarning($"Recording process exited unexpectedly, restarting recording...");
-                        // Restart recording on the UI thread if needed
-                        App.Current.Dispatcher.Invoke(() =>
-                        {
-                            StartRecording();
-                        });
-                    }
-                };
-
-                if (_recordingProcess.Start())
-                {
-                    _recordingProcess.BeginErrorReadLine();
-                    _isRecording = true;
-                    _logger.Log($"Started recording to {_recordingFilePath}");
-                }
-                else
-                {
-                    _logger.LogError("Failed to start FFmpeg recording process.");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError($"Error starting recording: {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// Stops the recording process if active.
-        /// </summary>
-        public void StopRecording()
-        {
-            if (!_isRecording || _recordingProcess == null) return;
-
-            try
-            {
-
-                // Close standard input to signal FFmpeg to finish
-                _recordingProcess.StandardInput.Close();
-
-                // Wait for FFmpeg to flush and exit
-                if (!_recordingProcess.WaitForExit(5000))
-                {
-                    _logger.LogWarning($"FFmpeg recording process did not exit within timeout, killing...");
-                    _recordingProcess.Kill();
-                    _recordingProcess.WaitForExit(2000);
-                }
-
-                _logger.Log($"Stopped recording. File saved: {_recordingFilePath}");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError($"Error stopping recording: {ex.Message}");
-            }
-            finally
-            {
-                _isRecording = false;
-                _recordingProcess?.Dispose();
-                _recordingProcess = null;
-                _recordingFilePath = null;
-            }
-        }
-
-        private bool IsRtmpStream(string url)
-        {
-            return url.StartsWith("rtmp://", StringComparison.OrdinalIgnoreCase);
-        }
         public void ChangeResolution(int width, int height)
         {
             if (_displayWidth == width && _displayHeight == height) return;
@@ -292,7 +188,7 @@ namespace KaleidoStream
         {
             // Low latency FFmpeg arguments for RTSP
             string arguments;
-            if (IsRtmpStream(_streamUrl))
+            if (FFmpegUtils.IsRtmpStream(_streamUrl))
             {
                 // RTMP: no -rtsp_transport, use low latency flags if needed
                 arguments = $"-fflags nobuffer -flags low_delay -max_delay 0 -i \"{_streamUrl}\" " +
@@ -310,18 +206,19 @@ namespace KaleidoStream
 
             var startInfo = new ProcessStartInfo
             {
-                FileName = GetFFmpegPath(),
+                FileName = FFmpegUtils.GetFFmpegPath(),
                 Arguments = arguments,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
+                RedirectStandardInput = true,
                 CreateNoWindow = true
             };
 
-            using var process = new Process { StartInfo = startInfo };
+            _recordingProcess= new Process { StartInfo = startInfo };
 
             var errorOutput = new System.Text.StringBuilder();
-            process.ErrorDataReceived += (sender, e) =>
+            _recordingProcess.ErrorDataReceived += (sender, e) =>
             {
                 if (!string.IsNullOrEmpty(e.Data))
                 {
@@ -351,17 +248,17 @@ namespace KaleidoStream
 
             try
             {
-                if (!process.Start())
+                if (!_recordingProcess.Start())
                 {
                     throw new InvalidOperationException("Failed to start FFmpeg process");
                 }
 
-                process.BeginErrorReadLine();
+                _recordingProcess.BeginErrorReadLine();
 
                 // Wait for process to initialize and start producing output
                 await Task.Delay(200, cancellationToken);
 
-                if (process.HasExited)
+                if (_recordingProcess.HasExited)
                 {
                     throw new InvalidOperationException($"FFmpeg exited early: {errorOutput}");
                 }
@@ -376,18 +273,18 @@ namespace KaleidoStream
                 });
               
                 var buffer = new byte[frameSize];
-                var stream = process.StandardOutput.BaseStream;
+                var stream = _recordingProcess.StandardOutput.BaseStream;
                 var readBuffer = new byte[8192]; // Read buffer for chunks
 
                 _lastFrameTime = DateTime.Now;
                 bool firstFrameReceived = false;
 
-                while (!cancellationToken.IsCancellationRequested && !process.HasExited)
+                while (!cancellationToken.IsCancellationRequested && !_recordingProcess.HasExited)
                 {
                     int totalBytesRead = 0;
 
                     // Read complete frame
-                    while (totalBytesRead < frameSize && !cancellationToken.IsCancellationRequested && !process.HasExited)
+                    while (totalBytesRead < frameSize && !cancellationToken.IsCancellationRequested && !_recordingProcess.HasExited)
                     {
                         int chunkSize = Math.Min(readBuffer.Length, frameSize - totalBytesRead);
                         int bytesRead = await stream.ReadAsync(readBuffer, 0, chunkSize, cancellationToken);
@@ -395,7 +292,7 @@ namespace KaleidoStream
                         if (bytesRead == 0)
                         {
                             // Check if process is still running
-                            if (process.HasExited)
+                            if (_recordingProcess.HasExited)
                                 throw new InvalidOperationException($"FFmpeg process exited unexpectedly: {errorOutput}");
             
                             await Task.Delay(10, cancellationToken); // Brief delay before retry
@@ -417,6 +314,12 @@ namespace KaleidoStream
                             _viewer.Status = "Connected";
                             _logger.Log($"{_streamName} - Successfully connected to stream: {_streamUrl}");
                             firstFrameReceived = true;
+
+                            // Start recording if requested and not already running
+                            if (_recordingManager.IsRecording && (_recordingProcess == null || _recordingProcess.HasExited))
+                            {
+                                _recordingManager.StartRecording();
+                            }
                         }
                     }
                 }
@@ -427,7 +330,7 @@ namespace KaleidoStream
                 }
 
                 // If FFmpeg exited unexpectedly, throw to trigger retry
-                if (process.HasExited && !cancellationToken.IsCancellationRequested)
+                if (_recordingProcess.HasExited && !cancellationToken.IsCancellationRequested)
                 {
                     throw new InvalidOperationException($"FFmpeg process exited unexpectedly: {errorOutput}");
                 }
@@ -441,11 +344,11 @@ namespace KaleidoStream
             {
                 try
                 {
-                    if (!process.HasExited)
+                    if (!_recordingProcess.HasExited)
                     {
-                        process.Kill();
+                        _recordingProcess.Kill();
                         // Give process time to exit gracefully
-                        if (!process.WaitForExit(2000))
+                        if (!_recordingProcess.WaitForExit(2000))
                         {
                             _logger.LogWarning($"{_streamName} - FFmpeg process did not exit within timeout for {_streamUrl}");
                         }
@@ -494,62 +397,7 @@ namespace KaleidoStream
             }
         }
 
-        private string GetFFmpegPath()
-        {
-            // Try to find FFmpeg in common locations
-            var possiblePaths = new[]
-            {
-                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ffmpeg.exe"),
-                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ffmpeg", "ffmpeg.exe"),
-                System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "FFmpeg", "bin", "ffmpeg.exe"),
-                "ffmpeg" // Try system PATH without .exe for cross-platform compatibility
-            };
-
-            foreach (var path in possiblePaths)
-            {
-                if (File.Exists(path))
-                {
-                    return path;
-                }
-            }
-
-            // Try PATH
-            try
-            {
-                var process = new Process
-                {
-                    StartInfo = new ProcessStartInfo
-                    {
-                        FileName = "where", // Windows command to find executable in PATH
-                        Arguments = "ffmpeg",
-                        UseShellExecute = false,
-                        RedirectStandardOutput = true,
-                        CreateNoWindow = true
-                    }
-                };
-                process.Start();
-                var output = process.StandardOutput.ReadToEnd();
-                process.WaitForExit();
-
-                if (process.ExitCode == 0 && !string.IsNullOrWhiteSpace(output))
-                {
-                    var firstPath = output.Split('\n')[0].Trim();
-                    if (File.Exists(firstPath))
-                        return firstPath;
-                }
-            }
-            catch
-            {
-                // Fall through to error
-            }
-
-            throw new FileNotFoundException(
-                "FFmpeg executable not found. Please:\n" +
-                "1. Download FFmpeg from https://ffmpeg.org/download.html\n" +
-                "2. Place ffmpeg.exe in your application folder, or\n" +
-                "3. Install FFmpeg and add it to your system PATH");
-        }
-
+        
         public void Dispose()
         {
             if (_disposed) return;
@@ -560,7 +408,7 @@ namespace KaleidoStream
                 _cancellationTokenSource?.Cancel();
 
                 // Stop recording if active
-                StopRecording();
+                _recordingManager.StopRecording();
 
                 // Give the task time to complete gracefully
                 if (_streamingTask != null && !_streamingTask.IsCompleted)
