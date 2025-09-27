@@ -106,7 +106,10 @@ namespace KaleidoStream
             {
 
                 // Close standard input to signal FFmpeg to finish
-                _recordingProcess.StandardInput.Close();
+                if (_recordingProcess != null && !_recordingProcess.HasExited)
+                {
+                    _recordingProcess.StandardInput.Close();
+                }
 
                 // Wait for FFmpeg to flush and exit
                 if (!_recordingProcess.WaitForExit(2000))

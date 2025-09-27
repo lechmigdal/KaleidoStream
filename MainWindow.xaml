@@ -5,7 +5,7 @@
         Title="KaleidoStream - Video Stream Viewer" Height="800" Width="1200"
         WindowStartupLocation="CenterScreen"
 		WindowState="Maximized"
-        Icon="images/videowall.ico"
+        Icon="images/kaleidostream.ico"
         Background="{DynamicResource WindowBackgroundBrush}">
 
     <Grid>

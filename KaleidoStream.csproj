@@ -7,18 +7,19 @@
 		<ImplicitUsings>disable</ImplicitUsings>
 		<Nullable>disable</Nullable>
 		<AssemblyTitle>KaleidoStream</AssemblyTitle>
-		<AssemblyDescription>RTSP Stream Viewer Application</AssemblyDescription>
+		<AssemblyDescription>Stream Viewer Application</AssemblyDescription>
 		<AssemblyProduct>KaleidoStream</AssemblyProduct>
 		<AssemblyCompany>KaleidoStream</AssemblyCompany>
 		<AssemblyCopyright>Copyright © 2025</AssemblyCopyright>
 		<AssemblyVersion>1.0.0.0</AssemblyVersion>
 		<FileVersion>1.0.0.0</FileVersion>
 		<Platforms>AnyCPU;x64</Platforms>
-		<ApplicationIcon>images/videowall.ico</ApplicationIcon>
+		<ApplicationIcon>images/kaleidostream.ico</ApplicationIcon>
 	</PropertyGroup>
 
 	<ItemGroup>
 	  <None Remove="images\Delete.png" />
+	  <None Remove="images\kaleidostream.ico" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -34,8 +35,10 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<Resource Include="images/videowall.ico" />
 		<Resource Include="images\Delete.png" />
+		<Resource Include="images\kaleidostream.ico">
+		  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Resource>
 	</ItemGroup>
 
 	<ItemGroup>
