@@ -14,7 +14,7 @@ Supported stream types: RTMP, RTSP
 
 ## Installation
 1. Download and install [ffmpeg](https://ffmpeg.org/) (version 8.0+ recommended). Place `ffmpeg.exe` in the application folder or add it to your system PATH.
-2. Install [.NET 8.0 Runtime](https://dotnet.microsoft.com/en-us/download/dotnet/8.0/runtime).
+2. Install [.NET 8.0 Runtime](https://dotnet.microsoft.com/en-us/download/dotnet/8.0/runtime). (optional if you use the self-contained build))
 
 ## Usage
 - Launch `KaleidoStream.exe`.
