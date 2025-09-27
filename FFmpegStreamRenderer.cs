@@ -293,7 +293,7 @@ namespace KaleidoStream
                         {
                             // Check if process is still running
                             if (_displayProcess.HasExited)
-                                throw new InvalidOperationException($"FFmpeg process exited unexpectedly: {errorOutput}");
+                                _logger.Log($"FFmpeg process exited unexpectedly: {errorOutput}");
             
                             await Task.Delay(10, cancellationToken); // Brief delay before retry
                             continue;
@@ -326,13 +326,13 @@ namespace KaleidoStream
                 // If we exit the loop and never received a frame, treat as failure
                 if (!firstFrameReceived)
                 {
-                    throw new InvalidOperationException($"FFmpeg did not deliver any frames: {errorOutput}");
+                    _logger.Log($"FFmpeg {_streamName} did not deliver any frames: {errorOutput}");
                 }
 
                 // If FFmpeg exited unexpectedly, throw to trigger retry
                 if (_displayProcess.HasExited && !cancellationToken.IsCancellationRequested)
                 {
-                    throw new InvalidOperationException($"FFmpeg process exited unexpectedly: {errorOutput}");
+                    _logger.Log($"FFmpeg {_streamName} process exited unexpectedly: {errorOutput}");
                 }
             }
             catch (Exception ex) when (!(ex is OperationCanceledException))

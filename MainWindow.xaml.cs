@@ -479,10 +479,13 @@ resolution:
                     var timestampedMessage = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {message}";
                     _logWriter?.WriteLine(timestampedMessage);
                     Console.WriteLine(timestampedMessage);
+                    System.Diagnostics.Debug.WriteLine(timestampedMessage);
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine($"Logging error: {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine($"Logging error: {ex.Message}");
+
                 }
             }
         }
