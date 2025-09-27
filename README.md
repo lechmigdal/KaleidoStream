@@ -1,11 +1,32 @@
 # KaleidoStream
 
-Multi-stream viewer supporting video streams, for Windows 10 and Windows 11.
+Multi-stream viewer and recorder for Windows 10 and Windows 11.
 
 Supported stream types: RTMP, RTSP
 
-Technically there is no maximum number of streams it can handle, but the practical limit is determined by your hardware capabilities (CPU, RAM, network bandwidth).
+## Features
+- View multiple video streams in a dynamic grid
+- Record any stream to disk (MPEG-TS format)
+- Light and dark theme support
+- Per-stream resolution selection
+- Context menu for stream actions (start/stop, record)
+- YAML-based configuration
 
-Install before running VideoWall
-1. ffmpeg (download it from https://ffmpeg.org/), version 8.0 N-120864-g9a34ddc345-20250901
-1. .NET 8.0 runtime (download it from https://dotnet.microsoft.com/en-us/download/dotnet/8.0/runtime)
+## Installation
+1. Download and install [ffmpeg](https://ffmpeg.org/) (version 8.0+ recommended). Place `ffmpeg.exe` in the application folder or add it to your system PATH.
+2. Install [.NET 8.0 Runtime](https://dotnet.microsoft.com/en-us/download/dotnet/8.0/runtime).
+
+## Usage
+- Launch `KaleidoStream.exe`.
+- Right-click a stream for options
+- Use the menu to change theme or resolution.
+- Logs are saved in the `logs` directory.
+- Videos are saves in the 'videos' directory.
+
+## Troubleshooting
+- If streams do not display, check that `ffmpeg.exe` is accessible and your stream URLs are correct.
+- For errors, see the log files in the `logs` folder.
+- For support, open an issue on [GitHub](https://github.com/lechmigdal/KaleidoStream).
+
+## License
+[MIT](LICENSE)

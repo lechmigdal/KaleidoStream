@@ -5,7 +5,6 @@
 1. Menu -> Stop all / start all (select option)
 1. Help / send feedback
 1. Test running of the app for couple of hours -> memory usage, crashes?
-1. Review exceptions and clean them
 1. Right mouse click on the stream -> make it bigger to put it into a bigger view (that stream full size, the rest small on the side)
 1. Right mouse click on the stream -> Put it into separate window (dock out)
 1. Rick mouse click on separate window stream -> send it back to the main screen
