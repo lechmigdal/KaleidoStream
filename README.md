@@ -29,4 +29,4 @@ Supported stream types: RTMP, RTSP
 - For support, open an issue on [GitHub](https://github.com/lechmigdal/KaleidoStream).
 
 ## License
-[MIT](LICENSE)
+[MIT](LICENSE.txt)
