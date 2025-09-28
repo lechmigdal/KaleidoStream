@@ -31,7 +31,7 @@ namespace KaleidoStream
 
         public event Action<string> ResolutionDetected;
 
-        private Process _displayProcess;                
+        private Process _displayProcess;
 
         public bool IsRecording => _recordingManager.IsRecording;
 
@@ -44,7 +44,7 @@ namespace KaleidoStream
 
         public void StartRecording()
         {
-            _recordingManager.RequestRecordingStart();             
+            _recordingManager.RequestRecordingStart();
         }
 
         public string InputResolution
@@ -215,7 +215,7 @@ namespace KaleidoStream
                 CreateNoWindow = true
             };
 
-            _displayProcess= new Process { StartInfo = startInfo };
+            _displayProcess = new Process { StartInfo = startInfo };
 
             var errorOutput = new System.Text.StringBuilder();
             _displayProcess.ErrorDataReceived += (sender, e) =>
@@ -271,7 +271,7 @@ namespace KaleidoStream
                     _videoBitmap = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgr24, null);
                     _viewer.SetVideoFrame(_videoBitmap);
                 });
-              
+
                 var buffer = new byte[frameSize];
                 var stream = _displayProcess.StandardOutput.BaseStream;
                 var readBuffer = new byte[8192]; // Read buffer for chunks
@@ -293,8 +293,8 @@ namespace KaleidoStream
                         {
                             // Check if process is still running
                             if (_displayProcess.HasExited)
-                                _logger.Log($"FFmpeg process exited unexpectedly: {errorOutput}");
-            
+                                throw new InvalidOperationException($"FFmpeg process exited unexpectedly: {errorOutput}");
+
                             await Task.Delay(10, cancellationToken); // Brief delay before retry
                             continue;
                         }
@@ -326,13 +326,13 @@ namespace KaleidoStream
                 // If we exit the loop and never received a frame, treat as failure
                 if (!firstFrameReceived)
                 {
-                    _logger.Log($"FFmpeg {_streamName} did not deliver any frames: {errorOutput}");
+                    throw new InvalidOperationException($"FFmpeg did not deliver any frames: {errorOutput}");
                 }
 
                 // If FFmpeg exited unexpectedly, throw to trigger retry
                 if (_displayProcess.HasExited && !cancellationToken.IsCancellationRequested)
                 {
-                    _logger.Log($"FFmpeg {_streamName} process exited unexpectedly: {errorOutput}");
+                    throw new InvalidOperationException($"FFmpeg process exited unexpectedly: {errorOutput}");
                 }
             }
             catch (Exception ex) when (!(ex is OperationCanceledException))
@@ -397,7 +397,7 @@ namespace KaleidoStream
             }
         }
 
-        
+
         public void Dispose()
         {
             if (_disposed) return;
