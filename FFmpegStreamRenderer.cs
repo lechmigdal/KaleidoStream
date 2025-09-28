@@ -194,6 +194,12 @@ namespace KaleidoStream
                 arguments = $"-fflags nobuffer -flags low_delay -max_delay 0 -i \"{_streamUrl}\" " +
                             $"-vf scale={_displayWidth}:{_displayHeight} -pix_fmt bgr24 -f rawvideo -";
             }
+            else if (FFmpegUtils.IsHlsStream(_streamUrl))
+            {
+                // HLS: no -rtsp_transport, just use the URL
+                arguments = $"-fflags nobuffer -flags low_delay -i \"{_streamUrl}\" " +
+                            $"-vf scale={_displayWidth}:{_displayHeight} -pix_fmt bgr24 -f rawvideo -";
+            }
             else
             {
                 // RTSP

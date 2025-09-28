@@ -2,7 +2,7 @@
 
 Multi-stream viewer and recorder for Windows 10 and Windows 11.
 
-Supported stream types: RTMP, RTSP
+Supported stream types: RTMP, RTSP, HLS (.m3u8)
 
 ## Features
 - View multiple video streams in a dynamic grid

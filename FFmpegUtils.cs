@@ -71,6 +71,12 @@ namespace KaleidoStream
         {
             return url.StartsWith("rtmp://", StringComparison.OrdinalIgnoreCase);
         }
+
+
+        public static bool IsHlsStream(string url)
+        {
+            return url != null && url.EndsWith(".m3u8", StringComparison.OrdinalIgnoreCase);
+        }
     }
 
    

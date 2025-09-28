@@ -1,5 +1,6 @@
 # TODO
 
+1. validate entered URL
 1. Change theme of the VideoWindow according to seleted theme
 1. Selection of resolution for each stream (right mouse click)
 1. Menu -> Stop all / start all (select option)
