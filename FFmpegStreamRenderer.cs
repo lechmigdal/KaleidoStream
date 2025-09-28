@@ -197,7 +197,7 @@ namespace KaleidoStream
             else if (FFmpegUtils.IsHlsStream(_streamUrl))
             {
                 // HLS: no -rtsp_transport, just use the URL
-                arguments = $"-fflags nobuffer -flags low_delay -i \"{_streamUrl}\" " +
+                arguments = $"-re -fflags nobuffer -flags low_delay -i \"{_streamUrl}\" " +
                             $"-vf scale={_displayWidth}:{_displayHeight} -pix_fmt bgr24 -f rawvideo -";
             }
             else
@@ -257,6 +257,16 @@ namespace KaleidoStream
                 if (!_displayProcess.Start())
                 {
                     throw new InvalidOperationException("Failed to start FFmpeg process");
+                }
+
+                // Set process priority to AboveNormal or High
+                try
+                {
+                    _displayProcess.PriorityClass = ProcessPriorityClass.AboveNormal;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning($"{_streamName} - Could not set FFmpeg process priority: {ex.Message}");
                 }
 
                 _displayProcess.BeginErrorReadLine();

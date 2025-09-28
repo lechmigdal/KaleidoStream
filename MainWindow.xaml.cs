@@ -631,7 +631,23 @@ resolution:
             var contextMenu = new ContextMenu();
             contextMenu.Items.Add(_startStopMenuItem);
             contextMenu.Items.Add(_recordMenuItem);
+
+            // Create Resolution submenu
+            var resolutionMenu = new MenuItem { Header = "Resolution" };
+            string[] resolutions = { "176x144", "320x240", "480x360", "640x480", "1024x768", "1920x1080" };
+
+            foreach (var res in resolutions)
+            {
+                var resItem = new MenuItem { Header = res, Tag = res };
+                resItem.Click += (s, e) => ChangeStreamViewResolution(res);
+                resolutionMenu.Items.Add(resItem);
+            }
+
+            // Insert the Resolution submenu before the record/start/stop items
+            contextMenu.Items.Insert(0, resolutionMenu);
+
             ContextMenu = contextMenu;
+
             UpdateContextMenuText();
 
             // Initialize FFmpeg renderer
@@ -643,6 +659,15 @@ resolution:
             _startButton.Visibility = Visibility.Visible;
             _stopButton.Visibility = Visibility.Collapsed;
             Status=Properties.Resources.Stopping;
+        }
+
+        private void ChangeStreamViewResolution(string resolution)
+        {
+            var parts = resolution.Split('x');
+            if (parts.Length == 2 && int.TryParse(parts[0], out int w) && int.TryParse(parts[1], out int h))
+            {
+                ChangeResolution(w, h);
+            }
         }
 
         private void UpdateContextMenuText()
@@ -771,6 +796,7 @@ resolution:
             _renderer?.ChangeResolution(width, height);
             // Force status update to reflect new render resolution
             Status = IsConnected ? Properties.Resources.ConnectedStatus : Properties.Resources.ConnectingStatus;
+            _ = ReconnectAsync();
         }
 
         public void UpdateStatus()

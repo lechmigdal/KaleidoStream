@@ -25,6 +25,7 @@
                     <MenuItem Header="480x360" Click="ResolutionMenuItem_Click" Tag="480x360"/>
                     <MenuItem Header="640x480" Click="ResolutionMenuItem_Click" Tag="640x480"/>
                     <MenuItem Header="1024x768" Click="ResolutionMenuItem_Click" Tag="1024x768"/>
+                    <MenuItem Header="1024x768" Click="ResolutionMenuItem_Click" Tag="1920x1080"/>
                 </MenuItem>
                 <MenuItem Header="{x:Static properties:Resources.MenuExit}" Click="ExitMenuItem_Click"/>
             </MenuItem>

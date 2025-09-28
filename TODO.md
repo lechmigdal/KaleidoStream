@@ -2,7 +2,6 @@
 
 1. validate entered URL
 1. Change theme of the VideoWindow according to seleted theme
-1. Selection of resolution for each stream (right mouse click)
 1. Menu -> Stop all / start all (select option)
 1. Help / send feedback
 1. Test running of the app for couple of hours -> memory usage, crashes?
