@@ -43,6 +43,11 @@ namespace KaleidoStream
                 {
                     arguments = $"-fflags nobuffer -flush_packets 1 -fflags +genpts -i \"{_streamUrl}\" -c copy -f mpegts \"{_recordingFilePath}\"";
                 }
+                else if (FFmpegUtils.IsHlsStream(_streamUrl))
+                {
+                    // HLS: no -rtsp_transport, just use the URL
+                    arguments = $"-fflags +genpts -i \"{_streamUrl}\" -c copy -f mpegts \"{_recordingFilePath}\"";
+                }
                 else
                 {
                     arguments = $"-rtsp_transport tcp -fflags nobuffer -flush_packets 1 -fflags +genpts -i \"{_streamUrl}\" -c copy -f mpegts \"{_recordingFilePath}\"";
