@@ -644,7 +644,7 @@ resolution:
             }
 
             // Insert the Resolution submenu before the record/start/stop items
-            contextMenu.Items.Insert(0, resolutionMenu);
+            contextMenu.Items.Add(resolutionMenu);
 
             ContextMenu = contextMenu;
 
