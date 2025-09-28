@@ -11,8 +11,8 @@
 		<AssemblyProduct>KaleidoStream</AssemblyProduct>
 		<AssemblyCompany>KaleidoStream</AssemblyCompany>
 		<AssemblyCopyright>Copyright © 2025</AssemblyCopyright>
-		<AssemblyVersion>1.0.0.0</AssemblyVersion>
-		<FileVersion>1.0.0.0</FileVersion>
+		<AssemblyVersion>1.0.0.1</AssemblyVersion>
+		<FileVersion>1.0.0.1</FileVersion>
 		<Platforms>AnyCPU;x64</Platforms>
 		<ApplicationIcon>images/kaleidostream.ico</ApplicationIcon>
 	</PropertyGroup>

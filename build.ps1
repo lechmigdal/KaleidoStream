@@ -1,9 +1,13 @@
+# Clean previous publish directories
+if (Test-Path "releases\publish-fw") { Remove-Item "releases\publish-fw" -Recurse -Force }
+if (Test-Path "releases\publish-sc") { Remove-Item "releases\publish-sc" -Recurse -Force }
+
 # Get version from the .csproj file
 $csproj = Get-Content ./KaleidoStream.csproj
 $version = ($csproj | Select-String -Pattern '<AssemblyVersion>(.*?)</AssemblyVersion>').Matches.Groups[1].Value
 if (-not $version) {
     Write-Host "Could not find <AssemblyVersion> in KaleidoStream.csproj. Using 1.0.0.0 as fallback."
-    $version = "1.0.0.0"
+    $version = "0.0.0.0"
 }
 
 # Publish framework-dependent
