@@ -198,7 +198,7 @@ resolution:
                 try
                 {
                     var info = enabledStreams[i];
-                    var streamViewer = new StreamViewer(info.Url, info.Name, _logger, _globalResolution.Width, _globalResolution.Height);
+                    var streamViewer = new StreamViewer(info.Url, info.Name, _logger, _globalResolution.Width, _globalResolution.Height, this);
                     _streamViewers.Add(streamViewer);
                     StreamGrid.Children.Add(streamViewer);
                     // Start the stream immediately
@@ -410,6 +410,19 @@ resolution:
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         }
 
+        public void DisableStreamByUrl(string url)
+        {
+            // Find the StreamInfo and set Enabled to false
+            var streamInfo = _streamInfos.FirstOrDefault(si => si.Url == url);
+            if (streamInfo != null)
+            {
+                streamInfo.Enabled = false;
+                SaveConfiguration();
+                InitializeStreamGrid(); // Refresh the grid to remove/disable the viewer
+                _logger.Log($"Stream '{streamInfo.Name}' disabled via MainWindow.DisableStreamByUrl.");
+            }
+        }
+
         public class StreamConfig
         {
             public List<StreamInfo> Streams { get; set; }
@@ -490,6 +503,8 @@ resolution:
             }
         }
 
+
+
         public void Dispose()
         {
             lock (_lockObject)
@@ -516,6 +531,7 @@ resolution:
         private string _sourceResolution;
         private bool _isStopped;
         private bool _isRecording;
+        private readonly MainWindow _mainWindow;
         public bool IsRecording
         {
             get => _isRecording;
@@ -549,13 +565,14 @@ resolution:
         public string StreamUrl { get; }
         public bool IsConnected => _renderer?.IsConnected ?? false;
 
-        public StreamViewer(string streamUrl, string streamName, Logger logger, int width, int height)
+        public StreamViewer(string streamUrl, string streamName, Logger logger, int width, int height, MainWindow mainWindow)
         {
             StreamUrl = streamUrl;
             _streamName = streamName;
             _logger = logger;
             _width = width;
             _height = height;
+            _mainWindow = mainWindow;
 
             // Create UI layout
             _container = new Border
@@ -629,6 +646,15 @@ resolution:
             _recordMenuItem.Click += RecordMenuItem_Click;
 
             var contextMenu = new ContextMenu();
+            var disableMenuItem = new MenuItem { Header = "Disable" };
+            disableMenuItem.Click += (s, e) =>
+            {
+                StopStreaming();                
+                _logger.Log($"Stream '{_streamName}' disabled via context menu.");
+                _mainWindow.DisableStreamByUrl(StreamUrl);
+
+            };
+            contextMenu.Items.Add(disableMenuItem);
             contextMenu.Items.Add(_startStopMenuItem);
             contextMenu.Items.Add(_recordMenuItem);
 
