@@ -17,8 +17,8 @@ dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile
 dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o releases\publish-sc
 
 # Zip the outputs
-$fwZip = "releases\KaleidoStream-$version-win-x64-framework.zip"
-$scZip = "releases\KaleidoStream-$version-win-x64-selfcontained.zip"
+$fwZip = "releases\KaleidoStream-$version-win-x64-base.zip"
+$scZip = "releases\KaleidoStream-$version-win-x64-dotnetruntimeincluded.zip"
 
 if (Test-Path $fwZip) { Remove-Item $fwZip }
 if (Test-Path $scZip) { Remove-Item $scZip }
